@@ -1,3 +1,4 @@
+```python
 from flask import Flask, request, render_template
 from flask_socketio import SocketIO
 import time
@@ -11,7 +12,8 @@ app = Flask(__name__)
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*"
+    cors_allowed_origins="*",
+    async_mode="gevent"
 )
 
 
@@ -60,7 +62,7 @@ last_data = {
 
 
 # ==================================================
-# PAGE
+# PAGE PRINCIPALE
 # ==================================================
 
 @app.route("/")
@@ -81,20 +83,26 @@ def get_race_time():
     global race_paused
     global elapsed_time
 
-
+    # ----------------------------------------------
     # Course arrêtée
+    # ----------------------------------------------
+
     if race_start_time is None:
 
         return elapsed_time
 
-
+    # ----------------------------------------------
     # Course en pause
+    # ----------------------------------------------
+
     if race_paused:
 
         return elapsed_time
 
-
+    # ----------------------------------------------
     # Course en cours
+    # ----------------------------------------------
+
     return (
         elapsed_time
         +
@@ -107,13 +115,12 @@ def get_race_time():
 
 
 # ==================================================
-# ENVOI CHRONO
+# ENVOI DU CHRONO
 # ==================================================
 
 def send_chrono():
 
     chrono = get_race_time()
-
 
     socketio.emit(
         "chrono_update",
@@ -136,6 +143,11 @@ def send_chrono():
 
 def chrono_loop():
 
+    print(
+        "⏱️ BOUCLE CHRONO DÉMARRÉE",
+        flush=True
+    )
+
     while True:
 
         socketio.sleep(0.1)
@@ -143,6 +155,85 @@ def chrono_loop():
         if race_start_time is not None:
 
             send_chrono()
+
+
+# ==================================================
+# CONNEXION SOCKET.IO
+#
+# IMPORTANT :
+# Permet au navigateur de récupérer
+# l'état actuel après un F5.
+# ==================================================
+
+@socketio.on("connect")
+def handle_connect():
+
+    print(
+        "🌐 CLIENT CONNECTÉ",
+        flush=True
+    )
+
+    # ----------------------------------------------
+    # CHRONO
+    # ----------------------------------------------
+
+    socketio.emit(
+        "chrono_update",
+        {
+            "time":
+                get_race_time(),
+
+            "running":
+                race_start_time is not None
+                and not race_paused,
+
+            "paused":
+                race_paused
+        }
+    )
+
+    # ----------------------------------------------
+    # MODE
+    # ----------------------------------------------
+
+    socketio.emit(
+        "mode_update",
+        {
+            "mode":
+                resultat_mode
+        }
+    )
+
+    # ----------------------------------------------
+    # CLASSEMENT
+    # ----------------------------------------------
+
+    socketio.emit(
+        "classement_update",
+        last_data["classement"]
+    )
+
+    # ----------------------------------------------
+    # RÉSULTATS PRÉCÉDENTS
+    # ----------------------------------------------
+
+    socketio.emit(
+        "previous_results_update",
+        previous_results
+    )
+
+
+# ==================================================
+# DÉCONNEXION SOCKET.IO
+# ==================================================
+
+@socketio.on("disconnect")
+def handle_disconnect():
+
+    print(
+        "🔴 CLIENT DÉCONNECTÉ",
+        flush=True
+    )
 
 
 # ==================================================
@@ -154,40 +245,33 @@ def construire_classement(data):
     global resultat_mode
     global previous_results
 
-
     pilotes = data.get(
         "pilots",
         []
     )
-
 
     pilots_place = data.get(
         "pilots_place",
         {}
     )
 
-
     laps = data.get(
         "pilots_numberOfLaps",
         {}
     )
-
 
     bestlaps = data.get(
         "pilot_bestlap",
         {}
     )
 
-
     classement = []
-
 
     # ==================================================
     # CONSTRUCTION DES DONNÉES
     # ==================================================
 
     for index, pilote in enumerate(pilotes):
-
 
         # ----------------------------------------------
         # TOURS EN COURS
@@ -198,10 +282,11 @@ def construire_classement(data):
             0
         )
 
-
         try:
 
-            tours = int(tours)
+            tours = int(
+                tours
+            )
 
         except (
             ValueError,
@@ -209,7 +294,6 @@ def construire_classement(data):
         ):
 
             tours = 0
-
 
         # ----------------------------------------------
         # MEILLEUR TOUR
@@ -219,7 +303,6 @@ def construire_classement(data):
             pilote,
             [0, 0]
         )
-
 
         if isinstance(
             bestlap_data,
@@ -240,7 +323,6 @@ def construire_classement(data):
 
             bestlap = bestlap_data
 
-
         try:
 
             bestlap = float(
@@ -254,16 +336,14 @@ def construire_classement(data):
 
             bestlap = 0
 
-
         # ----------------------------------------------
-        # PLACE FOURNIE PAR CHRONOPY
+        # PLACE CHRONOPY
         # ----------------------------------------------
 
         place_chronopy = pilots_place.get(
             pilote,
             999999
         )
-
 
         try:
 
@@ -278,7 +358,6 @@ def construire_classement(data):
 
             place_chronopy = 999999
 
-
         # ----------------------------------------------
         # TOURS PRÉCÉDENTS
         # ----------------------------------------------
@@ -287,7 +366,6 @@ def construire_classement(data):
             pilote,
             0
         )
-
 
         try:
 
@@ -302,7 +380,6 @@ def construire_classement(data):
 
             tours_precedents = 0
 
-
         # ----------------------------------------------
         # TOURS TOTAL
         # ----------------------------------------------
@@ -313,14 +390,16 @@ def construire_classement(data):
             tours
         )
 
-
         classement.append(
             {
-                "pilote": pilote,
+                "pilote":
+                    pilote,
 
-                "tours": tours,
+                "tours":
+                    tours,
 
-                "bestlap": bestlap,
+                "bestlap":
+                    bestlap,
 
                 "place_chronopy":
                     place_chronopy,
@@ -331,13 +410,10 @@ def construire_classement(data):
                 "tours_total":
                     tours_total,
 
-                # Permet de conserver
-                # l'ordre original
                 "_index":
                     index
             }
         )
-
 
     # ==================================================
     # TRI
@@ -348,7 +424,6 @@ def construire_classement(data):
         # ----------------------------------------------
         # QUALIFICATIONS
         # ----------------------------------------------
-        # Meilleur tour uniquement
 
         classement.sort(
             key=lambda x: (
@@ -358,43 +433,22 @@ def construire_classement(data):
             )
         )
 
-
     elif resultat_mode == 2:
 
         # ----------------------------------------------
         # COURSE
         # ----------------------------------------------
-        #
-        # On utilise UNIQUEMENT la place fournie
-        # par Chronopy.
-        #
-        # Chronopy a déjà calculé le classement.
-        #
 
         classement.sort(
             key=lambda x:
                 x["place_chronopy"]
         )
 
-
     elif resultat_mode == 3:
 
         # ----------------------------------------------
         # ENDURANCE
         # ----------------------------------------------
-        #
-        # Tours total =
-        #
-        # tours de la course précédente
-        # +
-        # tours de la course actuelle
-        #
-        # Plus grand nombre de tours total
-        # = meilleure position.
-        #
-        # En cas d'égalité, on conserve l'ordre
-        # fourni par Chronopy.
-        #
 
         classement.sort(
             key=lambda x: (
@@ -402,7 +456,6 @@ def construire_classement(data):
                 x["_index"]
             )
         )
-
 
     else:
 
@@ -415,7 +468,6 @@ def construire_classement(data):
                 x["place_chronopy"]
         )
 
-
     # ==================================================
     # ATTRIBUTION DES PLACES
     # ==================================================
@@ -426,7 +478,6 @@ def construire_classement(data):
 
         row["place"] = i + 1
 
-
     # ==================================================
     # SUPPRESSION DONNÉE INTERNE
     # ==================================================
@@ -434,7 +485,6 @@ def construire_classement(data):
     for row in classement:
 
         del row["_index"]
-
 
     return classement
 
@@ -456,22 +506,19 @@ def event():
     global resultat_mode
     global previous_results
 
-
     data = request.get_json(
         silent=True
     ) or {}
 
-
     print(
-        "EVENT REÇU :",
-        data
+        "📥 EVENT REÇU :",
+        data,
+        flush=True
     )
-
 
     event_type = data.get(
         "event"
     )
-
 
     # ==================================================
     # CHANGEMENT DE MODE
@@ -483,7 +530,6 @@ def event():
             "resultat_mode",
             0
         )
-
 
         try:
 
@@ -498,15 +544,14 @@ def event():
 
             resultat_mode = 0
 
-
         print(
             "🎛️ MODE :",
-            resultat_mode
+            resultat_mode,
+            flush=True
         )
 
-
         # ----------------------------------------------
-        # INFORMER LE HTML
+        # Informer tous les navigateurs
         # ----------------------------------------------
 
         socketio.emit(
@@ -517,28 +562,28 @@ def event():
             }
         )
 
-
         # ----------------------------------------------
-        # Si on possède déjà des données,
-        # recalculer le classement
+        # Si des données existent déjà,
+        # reconstruire le classement
         # ----------------------------------------------
 
-        if last_data["classement"]:
+        if last_data.get("raw_data"):
 
-            # On ne peut pas reconstruire ici
-            # à partir du classement déjà transformé.
-            #
-            # Le prochain update reconstruira
-            # correctement le classement.
+            classement = construire_classement(
+                last_data["raw_data"]
+            )
 
+            last_data["classement"] = classement
 
-            pass
-
+            socketio.emit(
+                "classement_update",
+                classement
+            )
 
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # RÉSULTATS PRÉCÉDENTS
@@ -551,9 +596,6 @@ def event():
             {}
         )
 
-
-        # Sécurisation des valeurs
-
         if not isinstance(
             previous_results,
             dict
@@ -561,27 +603,21 @@ def event():
 
             previous_results = {}
 
-
         print(
             "📋 RÉSULTATS PRÉCÉDENTS :",
-            previous_results
+            previous_results,
+            flush=True
         )
-
-
-        # ----------------------------------------------
-        # Informer le navigateur
-        # ----------------------------------------------
 
         socketio.emit(
             "previous_results_update",
             previous_results
         )
 
-
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # UPDATE
@@ -589,30 +625,35 @@ def event():
 
     if event_type == "update":
 
+        # ----------------------------------------------
+        # Conserver les données originales
+        # pour pouvoir reconstruire le classement
+        # après un changement de mode.
+        # ----------------------------------------------
+
+        last_data["raw_data"] = data
+
         classement = construire_classement(
             data
         )
 
-
         last_data["classement"] = classement
-
 
         print(
             "📊 CLASSEMENT :",
-            classement
+            classement,
+            flush=True
         )
-
 
         socketio.emit(
             "classement_update",
             classement
         )
 
-
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # COURSE DÉMARRÉE
@@ -626,19 +667,17 @@ def event():
 
         elapsed_time = 0.0
 
-
         print(
-            "🏁 COURSE DÉMARRÉE"
+            "🏁 COURSE DÉMARRÉE",
+            flush=True
         )
-
 
         send_chrono()
 
-
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # COURSE EN PAUSE
@@ -651,37 +690,33 @@ def event():
             and not race_paused
         ):
 
-
             elapsed_time += (
                 time.time()
                 -
                 race_start_time
             )
 
-
             race_paused = True
 
             race_start_time = None
 
-
             print(
-                "⏸️ COURSE EN PAUSE"
+                "⏸️ COURSE EN PAUSE",
+                flush=True
             )
-
 
             print(
                 "Temps mémorisé :",
-                elapsed_time
+                elapsed_time,
+                flush=True
             )
-
 
             send_chrono()
 
-
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # COURSE REPRISE
@@ -695,33 +730,31 @@ def event():
 
             race_paused = False
 
-
             print(
-                "▶️ COURSE REPRISE"
+                "▶️ COURSE REPRISE",
+                flush=True
             )
-
 
             print(
                 "Temps mémorisé :",
-                elapsed_time
+                elapsed_time,
+                flush=True
             )
 
-
             send_chrono()
-
 
         else:
 
             print(
                 "⚠️ Reprise demandée "
-                "mais la course n'est pas en pause"
+                "mais la course n'est pas en pause",
+                flush=True
             )
 
-
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # RESET
@@ -735,57 +768,78 @@ def event():
 
         elapsed_time = 0.0
 
-
         print(
-            "🔄 COURSE RESET"
+            "🔄 COURSE RESET",
+            flush=True
         )
-
 
         socketio.emit(
             "chrono_update",
             {
-                "time": 0,
+                "time":
+                    0,
 
-                "running": False,
+                "running":
+                    False,
 
-                "paused": False
+                "paused":
+                    False
             }
         )
-
 
         socketio.emit(
             "classement_update",
             []
         )
 
+        last_data["classement"] = []
 
         return {
-            "status": "ok"
-        }
-
+            "status":
+                "ok"
+        }, 200
 
     # ==================================================
     # ÉVÉNEMENT INCONNU
     # ==================================================
 
     print(
-        "⚠️ Événement inconnu :",
-        event_type
+        "⚠️ ÉVÉNEMENT INCONNU :",
+        event_type,
+        flush=True
     )
 
-
     return {
-        "status": "ok"
-    }
+        "status":
+            "ok"
+    }, 200
 
 
 # ==================================================
-# DÉMARRAGE
+# DÉMARRAGE DE LA BOUCLE CHRONO
+#
+# Gunicorn importe app.py directement.
+# Le bloc __main__ n'est donc pas exécuté.
+# ==================================================
+
+socketio.start_background_task(
+    chrono_loop
+)
+
+
+# ==================================================
+# DÉMARRAGE LOCAL
 # ==================================================
 
 if __name__ == "__main__":
-    socketio.start_background_task(
-        chrono_loop
-    )
-    socketio.run(app)
 
+    socketio.run(
+        app,
+
+        host="0.0.0.0",
+
+        port=5000,
+
+        debug=True
+    )
+```
