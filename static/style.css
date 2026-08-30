@@ -1,0 +1,82 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    background:#111;
+    color:white;
+    font-family:Consolas, monospace;
+
+    display:flex;
+    justify-content:center;
+
+    min-height:100vh;
+}
+
+.container{
+    width:90%;
+    max-width:900px;
+    padding:30px;
+}
+
+h1{
+    text-align:center;
+    margin-bottom:30px;
+    color:#4AA357;
+}
+
+.card{
+    background:#1d1d1d;
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:15px;
+    box-shadow:0 0 10px rgba(0,0,0,.5);
+}
+
+.label{
+    font-size:14px;
+    color:#999;
+    margin-bottom:10px;
+}
+
+.value{
+    font-size:28px;
+    font-weight:bold;
+}
+
+.waiting{
+    color:#cccccc;
+}
+
+.running{
+    color:#4AA357;
+}
+
+.paused{
+    color:#ffb400;
+}
+
+.finished{
+    color:#ff5050;
+}
+
+.chrono{
+    text-align:center;
+}
+
+#chrono{
+    font-size:72px;
+    font-weight:bold;
+    color:#4AA357;
+}
+
+#events{
+    list-style:none;
+}
+
+#events li{
+    padding:8px;
+    border-bottom:1px solid #333;
+}
