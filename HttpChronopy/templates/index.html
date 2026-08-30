@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Chronopy Live</title>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #111;
+            color: white;
+            font-family: Consolas, monospace;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 50px;
+            margin: 10px 0;
+        }
+
+        #mode {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #4AA357;
+        }
+
+        #chrono {
+            text-align: center;
+            font-size: 90px;
+            font-weight: bold;
+            color: #4AA357;
+            margin: 20px 0;
+        }
+
+        #status {
+            text-align: center;
+            color: #888;
+            margin-top: 10px;
+            font-size: 18px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+        }
+
+        th {
+            background: #222;
+            color: white;
+            font-size: 28px;
+            padding: 15px;
+        }
+
+        td {
+            text-align: center;
+            font-size: 24px;
+            padding: 12px;
+        }
+
+        tr:nth-child(even) {
+            background: #1d1d1d;
+        }
+
+        tr:nth-child(odd) {
+            background: #282828;
+        }
+
+        .first {
+            background: #d4af37 !important;
+            color: black;
+        }
+
+        .second {
+            background: #c0c0c0 !important;
+            color: black;
+        }
+
+        .third {
+            background: #cd7f32 !important;
+            color: black;
+        }
+
+        @media (max-width: 800px) {
+
+            h1 {
+                font-size: 34px;
+            }
+
+            #chrono {
+                font-size: 60px;
+            }
+
+            #mode {
+                font-size: 22px;
+            }
+
+            th {
+                font-size: 18px;
+                padding: 10px;
+            }
+
+            td {
+                font-size: 18px;
+                padding: 10px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<h1>
+    🏁 CLASSEMENT COURSE
+</h1>
+
+
+<div id="mode">
+    MODE : -
+</div>
+
+
+<div id="chrono">
+    00:00,0
+</div>
+
+
+<div id="status">
+    Connexion...
+</div>
+
+
+<table id="classement">
+
+    <thead>
+
+        <tr>
+
+            <th>
+                Pos
+            </th>
+
+            <th>
+                Pilote
+            </th>
+
+            <th id="colonne3">
+                Tours
+            </th>
+
+            <th id="colonne4">
+                Meilleur Tour
+            </th>
+
+        </tr>
+
+    </thead>
+
+    <tbody>
+    </tbody>
+
+</table>
+
+
+<script>
+
+
+// ==================================================
+// SOCKET
+// ==================================================
+
+const socket = io();
+
+
+// ==================================================
+// MODE
+//
+// 1 = Qualifications
+// 2 = Course
+// 3 = Endurance
+// ==================================================
+
+let currentMode = 0;
+
+
+// ==================================================
+// CLASSEMENT
+// ==================================================
+
+let currentClassement = [];
+
+
+// ==================================================
+// CHRONO
+// ==================================================
+
+let chronoTime = 0;
+
+let chronoRunning = false;
+
+let chronoLastServerUpdate = 0;
+
+let chronoAnimation = null;
+
+
+// ==================================================
+// CONNEXION
+// ==================================================
+
+socket.on("connect", () => {
+
+    console.log("Connecté au serveur");
+
+    document.getElementById(
+        "status"
+    ).textContent = "🟢 Connecté";
+
+});
+
+
+// ==================================================
+// DÉCONNEXION
+// ==================================================
+
+socket.on("disconnect", () => {
+
+    console.log("Déconnecté du serveur");
+
+    document.getElementById(
+        "status"
+    ).textContent = "🔴 Déconnecté";
+
+});
+
+
+// ==================================================
+// RÉCEPTION DU MODE
+// ==================================================
+
+socket.on(
+    "mode_update",
+    (data) => {
+
+        console.log(
+            "MODE REÇU :",
+            data
+        );
+
+
+        if (
+            data &&
+            data.mode !== undefined
+        ) {
+
+            currentMode =
+                Number(data.mode);
+
+        }
+
+
+        updateMode();
+
+        updateHeaders();
+
+        renderClassement();
+
+    }
+);
+
+
+// ==================================================
+// AFFICHAGE DU MODE
+// ==================================================
+
+function updateMode() {
+
+    const element =
+        document.getElementById(
+            "mode"
+        );
+
+
+    if (!element) {
+        return;
+    }
+
+
+    if (currentMode === 1) {
+
+        element.textContent =
+            "MODE : QUALIFICATIONS";
+
+    }
+
+    else if (currentMode === 2) {
+
+        element.textContent =
+            "MODE : COURSE";
+
+    }
+
+    else if (currentMode === 3) {
+
+        element.textContent =
+            "MODE : ENDURANCE";
+
+    }
+
+    else {
+
+        element.textContent =
+            "MODE : -";
+
+    }
+
+}
+
+
+// ==================================================
+// EN-TÊTES
+// ==================================================
+
+function updateHeaders() {
+
+    const colonne3 =
+        document.getElementById(
+            "colonne3"
+        );
+
+
+    const colonne4 =
+        document.getElementById(
+            "colonne4"
+        );
+
+
+    if (!colonne3 || !colonne4) {
+        return;
+    }
+
+
+    // ==============================================
+    // MODE 3 UNIQUEMENT
+    // ==============================================
+
+    if (currentMode === 3) {
+
+        colonne3.textContent =
+            "Tours total";
+
+        colonne4.textContent =
+            "Tours en cours";
+
+    }
+
+
+    // ==============================================
+    // MODES 1 ET 2
+    // ==============================================
+
+    else {
+
+        colonne3.textContent =
+            "Tours";
+
+        colonne4.textContent =
+            "Meilleur Tour";
+
+    }
+
+}
+
+
+// ==================================================
+// RÉCEPTION CLASSEMENT
+// ==================================================
+
+socket.on(
+    "classement_update",
+    (data) => {
+
+        console.log(
+            "CLASSEMENT REÇU :",
+            data
+        );
+
+
+        if (!Array.isArray(data)) {
+
+            console.error(
+                "Classement invalide :",
+                data
+            );
+
+            return;
+        }
+
+
+        currentClassement =
+            data;
+
+
+        renderClassement();
+
+    }
+);
+
+
+// ==================================================
+// AFFICHAGE CLASSEMENT
+// ==================================================
+
+function renderClassement() {
+
+    const tbody =
+        document.querySelector(
+            "#classement tbody"
+        );
+
+
+    if (!tbody) {
+        return;
+    }
+
+
+    tbody.innerHTML = "";
+
+
+    currentClassement.forEach(
+        (row, index) => {
+
+
+            const tr =
+                document.createElement(
+                    "tr"
+                );
+
+
+            // ------------------------------------------
+            // PLACE
+            // ------------------------------------------
+
+            const place =
+                Number(row.place)
+                || index + 1;
+
+
+            // ------------------------------------------
+            // PODIUM
+            // ------------------------------------------
+
+            if (place === 1) {
+
+                tr.classList.add(
+                    "first"
+                );
+
+            }
+
+            else if (place === 2) {
+
+                tr.classList.add(
+                    "second"
+                );
+
+            }
+
+            else if (place === 3) {
+
+                tr.classList.add(
+                    "third"
+                );
+
+            }
+
+
+            // ==========================================
+            // MODE 3 : ENDURANCE
+            // ==========================================
+
+            if (currentMode === 3) {
+
+                tr.innerHTML = `
+
+                    <td>
+                        ${place}
+                    </td>
+
+                    <td>
+                        ${row.pilote ?? "-"}
+                    </td>
+
+                    <td>
+                        ${row.tours_total ?? 0}
+                    </td>
+
+                    <td>
+                        ${row.tours ?? 0}
+                    </td>
+
+                `;
+
+            }
+
+
+            // ==========================================
+            // MODE 1 ET 2
+            // ==========================================
+
+            else {
+
+                tr.innerHTML = `
+
+                    <td>
+                        ${place}
+                    </td>
+
+                    <td>
+                        ${row.pilote ?? "-"}
+                    </td>
+
+                    <td>
+                        ${row.tours ?? 0}
+                    </td>
+
+                    <td>
+                        ${formatLap(
+                            row.bestlap
+                        )}
+                    </td>
+
+                `;
+
+            }
+
+
+            tbody.appendChild(
+                tr
+            );
+
+        }
+    );
+
+}
+
+
+// ==================================================
+// FORMAT MEILLEUR TOUR
+// ==================================================
+
+function formatLap(sec) {
+
+    if (
+        sec === undefined ||
+        sec === null ||
+        sec === "" ||
+        Number(sec) <= 0
+    ) {
+
+        return "--";
+    }
+
+
+    sec = Number(sec);
+
+
+    if (isNaN(sec)) {
+
+        return "--";
+    }
+
+
+    const minutes =
+        Math.floor(
+            sec / 60
+        );
+
+
+    const secondes =
+        Math.floor(
+            sec % 60
+        );
+
+
+    const dixieme =
+        Math.floor(
+            (sec * 10) % 10
+        );
+
+
+    return (
+        String(minutes)
+            .padStart(2, "0")
+        +
+        ":"
+        +
+        String(secondes)
+            .padStart(2, "0")
+        +
+        ","
+        +
+        dixieme
+    );
+
+}
+
+
+// ==================================================
+// CHRONO
+// ==================================================
+
+socket.on(
+    "chrono_update",
+    (data) => {
+
+        console.log(
+            "CHRONO :",
+            data
+        );
+
+
+        if (!data) {
+            return;
+        }
+
+
+        chronoTime =
+            Number(
+                data.time
+            ) || 0;
+
+
+        chronoRunning =
+            data.running === true;
+
+
+        chronoLastServerUpdate =
+            performance.now();
+
+
+        updateChronoDisplay();
+
+
+        if (chronoRunning) {
+
+            startChronoAnimation();
+
+        }
+
+        else {
+
+            stopChronoAnimation();
+
+        }
+
+    }
+);
+
+
+// ==================================================
+// ANIMATION CHRONO
+// ==================================================
+
+function startChronoAnimation() {
+
+    if (
+        chronoAnimation !== null
+    ) {
+
+        return;
+    }
+
+
+    function animate() {
+
+        if (!chronoRunning) {
+
+            chronoAnimation =
+                null;
+
+            return;
+        }
+
+
+        const now =
+            performance.now();
+
+
+        const delta =
+            (
+                now
+                -
+                chronoLastServerUpdate
+            ) / 1000;
+
+
+        const displayedTime =
+            chronoTime
+            +
+            delta;
+
+
+        updateChronoDisplay(
+            displayedTime
+        );
+
+
+        chronoAnimation =
+            requestAnimationFrame(
+                animate
+            );
+
+    }
+
+
+    chronoAnimation =
+        requestAnimationFrame(
+            animate
+        );
+
+}
+
+
+// ==================================================
+// ARRÊT CHRONO
+// ==================================================
+
+function stopChronoAnimation() {
+
+    if (
+        chronoAnimation !== null
+    ) {
+
+        cancelAnimationFrame(
+            chronoAnimation
+        );
+
+        chronoAnimation =
+            null;
+    }
+
+}
+
+
+// ==================================================
+// AFFICHAGE CHRONO
+// ==================================================
+
+function updateChronoDisplay(
+    time = chronoTime
+) {
+
+    const element =
+        document.getElementById(
+            "chrono"
+        );
+
+
+    if (!element) {
+        return;
+    }
+
+
+    element.textContent =
+        formatChrono(time);
+
+}
+
+
+// ==================================================
+// FORMAT CHRONO
+// ==================================================
+
+function formatChrono(sec) {
+
+    sec = Number(sec);
+
+
+    if (
+        isNaN(sec) ||
+        sec < 0
+    ) {
+
+        sec = 0;
+    }
+
+
+    const minutes =
+        Math.floor(
+            sec / 60
+        );
+
+
+    const secondes =
+        Math.floor(
+            sec % 60
+        );
+
+
+    const dixieme =
+        Math.floor(
+            (sec * 10) % 10
+        );
+
+
+    return (
+        String(minutes)
+            .padStart(2, "0")
+        +
+        ":"
+        +
+        String(secondes)
+            .padStart(2, "0")
+        +
+        ","
+        +
+        dixieme
+    );
+
+}
+
+
+// ==================================================
+// INITIALISATION
+// ==================================================
+
+updateMode();
+
+updateHeaders();
+
+updateChronoDisplay(0);
+
+
+</script>
+
+</body>
+
+</html>
+
